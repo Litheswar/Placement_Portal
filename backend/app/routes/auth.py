@@ -36,7 +36,7 @@ def admin_login():
         
     if not check_password_hash(admin.password_hash, password):
         return jsonify({
-            "message": "Invalid email or concept"
+            "message": "Invalid email or password"
         }), 401
         
     access_token = create_access_token(
