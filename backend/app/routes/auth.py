@@ -7,6 +7,9 @@ from app.models.admin import Admin
 from app.models.student import Student
 from app.models.company import Company
 
+from app.decorators.roles import admin_required, student_required, company_required
+
+
 auth_bp = Blueprint(
     "auth",
     __name__,
@@ -223,3 +226,33 @@ def company_login():
         "access_token": access_token,
         "role": "company"
     }), 200
+    
+    
+    
+    
+# --------------------- TEST ROUTE ------------------
+@auth_bp.route("/admin/profile")
+@admin_required
+def admin_profile():
+    
+    return jsonify({
+        "message": "Welcome Admin"
+    })
+    
+
+@auth_bp.route("/student/profile")
+@student_required
+def student_profile():
+
+    return jsonify({
+        "message": "Welcome Student"
+    })
+    
+    
+@auth_bp.route("/company/profile")
+@company_required
+def company_profile():
+
+    return jsonify({
+        "message": "Welcome Company"
+    })
