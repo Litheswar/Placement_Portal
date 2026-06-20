@@ -4,6 +4,7 @@ from config import Config
 from extensions import db, migrate, jwt
 from app.models import *
 from app.routes.auth import auth_bp
+from app.routes.drives import drives_bp
 
 from flask_cors import CORS
 
@@ -19,6 +20,7 @@ def create_app():
     jwt.init_app(app)
     
     app.register_blueprint(auth_bp)
+    app.register_blueprint(drives_bp)
     
     
     @app.route("/")
