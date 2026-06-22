@@ -1,0 +1,15 @@
+# .gitignore
+# Python cache
+__pycache__/
+*.pyc
+# Virtual environment
+backend/venv/
+# VSCode settings
+.vscode/
+# IDE metadata
+.idea/
+# OS files
+.DS_Store
+
+# Ignore node_modules if any frontend packages
+frontend/node_modules/
