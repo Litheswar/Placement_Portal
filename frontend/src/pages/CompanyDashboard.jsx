@@ -91,7 +91,7 @@ function CompanyDashboard() {
 
       // Clear success message after 5 seconds
       setTimeout(() => setSuccess(""), 5000);
-    }
+    
 
     
     }catch (err) {
