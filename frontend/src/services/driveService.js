@@ -42,3 +42,24 @@ export const closeDrive = async (driveId) => {
   const response = await axios.patch(`${API_BASE}/company/drives/${driveId}/close`, {}, getHeaders());
   return response.data;
 };
+
+export const getStudentProfile = async () => {
+  const response = await axios.get(`${API_BASE}/student/profile`, getHeaders());
+  return response.data;
+};
+
+export const updateStudentProfile = async (profileData) => {
+  const response = await axios.patch(`${API_BASE}/student/profile`, profileData, getHeaders());
+  return response.data;
+};
+
+export const applyForDrive = async (driveId) => {
+  const response = await axios.post(`${API_BASE}/student/applications`, { drive_id: driveId }, getHeaders());
+  return response.data;
+};
+
+export const getStudentApplications = async () => {
+  const response = await axios.get(`${API_BASE}/student/applications`, getHeaders());
+  return response.data;
+};
+
