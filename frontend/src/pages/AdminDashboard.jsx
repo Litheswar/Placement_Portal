@@ -1,6 +1,27 @@
 import { useState, useEffect } from "react";
 import { getAdminDrives, updateDriveStatus } from "../services/driveService";
 import { getAdminCompanies, updateCompanyStatus, getAdminDashboardStats } from "../services/companyService";
+import { Pie, Doughnut, Bar } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+} from "chart.js";
+
+ChartJS.register(
+  ArcElement,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title
+);
 
 function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("companies"); // companies or drives
@@ -50,6 +71,7 @@ function AdminDashboard() {
       setStats(data);
     } catch (err) {
       console.error("Error fetching dashboard stats:", err);
+      setError("Failed to load dashboard statistics");
     } finally {
       setLoadingStats(false);
     }
@@ -132,76 +154,212 @@ function AdminDashboard() {
           </div>
         </div>
       ) : stats && (
-        <div className="row g-4 mb-4">
-          <div className="col-md-6 col-lg-3">
-            <div className="card border-0 shadow-sm h-100">
-              <div className="card-body p-4">
-                <div className="d-flex align-items-center">
-                  <div className="flex-grow-1">
-                    <h6 className="text-muted mb-1">Total Students</h6>
-                    <h3 className="fw-bold text-primary mb-0">{stats.total_students}</h3>
+        <>
+          <div className="row g-4 mb-4">
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Total Students</h6>
+                      <h3 className="fw-bold text-primary mb-0">{stats.total_students}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-primary bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-people-fill text-primary fs-4"></i>
+                      </div>
+                    </div>
                   </div>
-                  <div className="ms-3">
-                    <div className="bg-primary bg-opacity-10 rounded-circle p-3">
-                      <i className="bi bi-people-fill text-primary fs-4"></i>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Total Companies</h6>
+                      <h3 className="fw-bold text-success mb-0">{stats.total_companies}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-success bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-building-fill text-success fs-4"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Placement Drives</h6>
+                      <h3 className="fw-bold text-info mb-0">{stats.total_drives}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-info bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-briefcase-fill text-info fs-4"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Applications</h6>
+                      <h3 className="fw-bold text-warning mb-0">{stats.total_applications}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-warning bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-file-earmark-text-fill text-warning fs-4"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Interviews</h6>
+                      <h3 className="fw-bold text-secondary mb-0">{stats.interviews_scheduled}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-secondary bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-calendar-check-fill text-secondary fs-4"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Selected</h6>
+                      <h3 className="fw-bold text-success mb-0">{stats.selected_students}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-success bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-check-circle-fill text-success fs-4"></i>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-          <div className="col-md-6 col-lg-3">
-            <div className="card border-0 shadow-sm h-100">
-              <div className="card-body p-4">
-                <div className="d-flex align-items-center">
-                  <div className="flex-grow-1">
-                    <h6 className="text-muted mb-1">Total Companies</h6>
-                    <h3 className="fw-bold text-success mb-0">{stats.total_companies}</h3>
-                  </div>
-                  <div className="ms-3">
-                    <div className="bg-success bg-opacity-10 rounded-circle p-3">
-                      <i className="bi bi-building-fill text-success fs-4"></i>
-                    </div>
-                  </div>
+
+          {/* Charts Section */}
+          <div className="row g-4 mb-4">
+            <div className="col-md-4">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-header bg-white py-3">
+                  <h5 className="card-title fw-bold mb-0">Company Status</h5>
+                </div>
+                <div className="card-body p-4">
+                  <Pie
+                    data={{
+                      labels: ['Approved', 'Pending'],
+                      datasets: [{
+                        data: [stats.approved_companies, stats.pending_companies],
+                        backgroundColor: ['#28a745', '#ffc107'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                      }]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: true,
+                      plugins: {
+                        legend: {
+                          position: 'bottom'
+                        }
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="col-md-4">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-header bg-white py-3">
+                  <h5 className="card-title fw-bold mb-0">Drive Status</h5>
+                </div>
+                <div className="card-body p-4">
+                  <Doughnut
+                    data={{
+                      labels: ['Approved', 'Pending', 'Closed'],
+                      datasets: [{
+                        data: [stats.approved_drives, stats.pending_drives, stats.closed_drives],
+                        backgroundColor: ['#28a745', '#ffc107', '#6c757d'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                      }]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: true,
+                      plugins: {
+                        legend: {
+                          position: 'bottom'
+                        }
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="col-md-4">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-header bg-white py-3">
+                  <h5 className="card-title fw-bold mb-0">Student Results</h5>
+                </div>
+                <div className="card-body p-4">
+                  <Bar
+                    data={{
+                      labels: ['Selected', 'Rejected', 'Waiting'],
+                      datasets: [{
+                        label: 'Students',
+                        data: [stats.selected_students, stats.rejected_students, stats.waiting_students],
+                        backgroundColor: ['#28a745', '#dc3545', '#ffc107'],
+                        borderWidth: 1,
+                        borderColor: ['#28a745', '#dc3545', '#ffc107']
+                      }]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: true,
+                      plugins: {
+                        legend: {
+                          display: false
+                        }
+                      },
+                      scales: {
+                        y: {
+                          beginAtZero: true,
+                          ticks: {
+                            stepSize: 1
+                          }
+                        }
+                      }
+                    }}
+                  />
                 </div>
               </div>
             </div>
           </div>
-          <div className="col-md-6 col-lg-3">
-            <div className="card border-0 shadow-sm h-100">
-              <div className="card-body p-4">
-                <div className="d-flex align-items-center">
-                  <div className="flex-grow-1">
-                    <h6 className="text-muted mb-1">Placement Drives</h6>
-                    <h3 className="fw-bold text-info mb-0">{stats.total_drives}</h3>
-                  </div>
-                  <div className="ms-3">
-                    <div className="bg-info bg-opacity-10 rounded-circle p-3">
-                      <i className="bi bi-briefcase-fill text-info fs-4"></i>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="col-md-6 col-lg-3">
-            <div className="card border-0 shadow-sm h-100">
-              <div className="card-body p-4">
-                <div className="d-flex align-items-center">
-                  <div className="flex-grow-1">
-                    <h6 className="text-muted mb-1">Total Applications</h6>
-                    <h3 className="fw-bold text-warning mb-0">{stats.total_applications}</h3>
-                  </div>
-                  <div className="ms-3">
-                    <div className="bg-warning bg-opacity-10 rounded-circle p-3">
-                      <i className="bi bi-file-earmark-text-fill text-warning fs-4"></i>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        </>
       )}
 
       {/* Main Tab Switcher */}

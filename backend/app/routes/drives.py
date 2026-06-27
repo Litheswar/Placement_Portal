@@ -456,28 +456,35 @@ def student_get_applications():
     student_id = safe_get_jwt_id()
     if student_id is None:
         return jsonify({"message": "Invalid authentication token payload"}), 401
-    
+
     student = db.session.get(Student, student_id)
     if not student:
         return jsonify({"message": "Student not found"}), 404
-        
-    stmt = select(Application).filter_by(student_id=student_id).options(
-        db.joinedload(Application.placement_drive).joinedload(PlacementDrive.company),
-        db.joinedload(Application.interview_schedule)
-    )
-    apps = db.session.scalars(stmt).all()
-    
+
+    try:
+        stmt = select(Application).filter_by(student_id=student_id).options(
+            db.joinedload(Application.placement_drive).joinedload(PlacementDrive.company),
+            db.joinedload(Application.interview_schedule)
+        )
+        apps = db.session.scalars(stmt).all()
+    except Exception:
+        # Handle case where interview_schedules table schema is not updated
+        stmt = select(Application).filter_by(student_id=student_id).options(
+            db.joinedload(Application.placement_drive).joinedload(PlacementDrive.company)
+        )
+        apps = db.session.scalars(stmt).all()
+
     result = []
     for app in apps:
         interview_data = None
-        if app.interview_schedule:
+        if hasattr(app, 'interview_schedule') and app.interview_schedule:
             interview_data = {
                 "interview_date": app.interview_schedule.interview_date.strftime("%Y-%m-%d %H:%M") if app.interview_schedule.interview_date else None,
                 "interview_mode": app.interview_schedule.interview_mode,
                 "location_or_link": app.interview_schedule.location_or_link,
                 "notes": app.interview_schedule.notes
             }
-        
+
         result.append({
             "id": app.id,
             "applied_on": app.applied_on.strftime("%Y-%m-%d %H:%M:%S") if app.applied_on else None,
@@ -492,7 +499,7 @@ def student_get_applications():
                 "company_name": app.placement_drive.company.name
             }
         })
-        
+
     return jsonify(result), 200
 
 
@@ -805,12 +812,16 @@ def company_dashboard_stats():
     # Count interviews scheduled (applications with interview schedule)
     interviews_scheduled = 0
     if company_drive_ids:
-        interviews_scheduled = db.session.scalar(
-            select(func.count())
-            .select_from(Application)
-            .join(InterviewSchedule, Application.id == InterviewSchedule.application_id)
-            .filter(Application.drive_id.in_(company_drive_ids))
-        ) or 0
+        try:
+            interviews_scheduled = db.session.scalar(
+                select(func.count())
+                .select_from(Application)
+                .join(InterviewSchedule, Application.id == InterviewSchedule.application_id)
+                .filter(Application.drive_id.in_(company_drive_ids))
+            ) or 0
+        except Exception:
+            # Handle case where interview_schedules table schema is not updated
+            interviews_scheduled = 0
     
     # Count results
     selected_students = 0
@@ -875,12 +886,17 @@ def student_dashboard_stats():
     ) or 0
     
     # Count interviews (applications with interview schedule)
-    interviews = db.session.scalar(
-        select(func.count())
-        .select_from(Application)
-        .join(InterviewSchedule, Application.id == InterviewSchedule.application_id)
-        .filter_by(student_id=student_id)
-    ) or 0
+    interviews = 0
+    try:
+        interviews = db.session.scalar(
+            select(func.count())
+            .select_from(Application)
+            .join(InterviewSchedule, Application.id == InterviewSchedule.application_id)
+            .filter_by(student_id=student_id)
+        ) or 0
+    except Exception:
+        # Handle case where interview_schedules table schema is not updated
+        interviews = 0
     
     # Count results
     selected = db.session.scalar(
@@ -900,4 +916,65 @@ def student_dashboard_stats():
         "selected": selected,
         "rejected": rejected,
         "waiting": waiting
+    }), 200
+
+
+# 11. Admin: Dashboard Stats
+@drives_bp.route("/admin/dashboard", methods=["GET"])
+@admin_required
+def admin_dashboard_stats():
+    # Count students
+    total_students = db.session.scalar(select(func.count()).select_from(Student)) or 0
+    
+    # Count companies
+    total_companies = db.session.scalar(select(func.count()).select_from(Company)) or 0
+    approved_companies = db.session.scalar(select(func.count()).select_from(Company).filter_by(approval_status="approved")) or 0
+    pending_companies = db.session.scalar(select(func.count()).select_from(Company).filter_by(approval_status="pending")) or 0
+    
+    # Count drives
+    total_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive)) or 0
+    approved_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive).filter_by(status="approved")) or 0
+    pending_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive).filter_by(status="pending")) or 0
+    closed_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive).filter_by(status="closed")) or 0
+    
+    # Count applications
+    total_applications = db.session.scalar(select(func.count()).select_from(Application)) or 0
+    
+    # Count interviews scheduled
+    interviews_scheduled = 0
+    try:
+        interviews_scheduled = db.session.scalar(
+            select(func.count())
+            .select_from(Application)
+            .join(InterviewSchedule, Application.id == InterviewSchedule.application_id)
+        ) or 0
+    except Exception:
+        # Handle case where interview_schedules table schema is not updated
+        interviews_scheduled = 0
+    
+    # Count results
+    selected_students = db.session.scalar(
+        select(func.count()).select_from(Application).filter_by(result="selected")
+    ) or 0
+    rejected_students = db.session.scalar(
+        select(func.count()).select_from(Application).filter_by(result="rejected")
+    ) or 0
+    waiting_students = db.session.scalar(
+        select(func.count()).select_from(Application).filter_by(result="waiting")
+    ) or 0
+    
+    return jsonify({
+        "total_students": total_students,
+        "total_companies": total_companies,
+        "approved_companies": approved_companies,
+        "pending_companies": pending_companies,
+        "total_drives": total_drives,
+        "approved_drives": approved_drives,
+        "pending_drives": pending_drives,
+        "closed_drives": closed_drives,
+        "total_applications": total_applications,
+        "selected_students": selected_students,
+        "rejected_students": rejected_students,
+        "waiting_students": waiting_students,
+        "interviews_scheduled": interviews_scheduled
     }), 200

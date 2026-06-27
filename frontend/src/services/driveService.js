@@ -93,3 +93,8 @@ export const getStudentDashboardStats = async () => {
   return response.data;
 };
 
+export const getAdminDashboardStats = async () => {
+  const response = await axios.get(`${API_BASE}/admin/dashboard`, getHeaders());
+  return response.data;
+};
+

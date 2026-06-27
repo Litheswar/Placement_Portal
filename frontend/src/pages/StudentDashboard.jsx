@@ -1,14 +1,28 @@
 import { useState, useEffect, useRef } from "react";
-import { 
-  getStudentDrives, 
-  getStudentProfile, 
-  updateStudentProfile, 
-  applyForDrive, 
-  getStudentApplications 
+import {
+  getStudentDrives,
+  getStudentProfile,
+  updateStudentProfile,
+  applyForDrive,
+  getStudentApplications,
+  getStudentDashboardStats
 } from "../services/driveService";
 import DrivesTab from "../components/student/DrivesTab";
 import ApplicationsTab from "../components/student/ApplicationsTab";
 import ProfileTab from "../components/student/ProfileTab";
+import { Doughnut } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+} from "chart.js";
+
+ChartJS.register(
+  ArcElement,
+  Tooltip,
+  Legend
+);
 
 function StudentDashboard() {
   const [activeTab, setActiveTab] = useState("drives");
@@ -29,6 +43,10 @@ function StudentDashboard() {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // Dashboard Stats
+  const [stats, setStats] = useState(null);
+  const [loadingStats, setLoadingStats] = useState(true);
   
   // Ref to track timeout for cleanup on unmount
   const successTimeoutRef = useRef(null);
@@ -37,7 +55,7 @@ function StudentDashboard() {
     try {
       setLoading(true);
       setError("");
-      
+
       const profileData = await getStudentProfile();
       setProfile(profileData);
       setProfileForm({
@@ -60,8 +78,22 @@ function StudentDashboard() {
     }
   };
 
+  const fetchDashboardStats = async () => {
+    try {
+      setLoadingStats(true);
+      const data = await getStudentDashboardStats();
+      setStats(data);
+    } catch (err) {
+      console.error("Error fetching dashboard stats:", err);
+      setError("Failed to load dashboard statistics");
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    fetchDashboardStats();
   }, []);
 
   // Cleanup timeout on unmount to prevent setSuccess calls after component unmounts
@@ -142,7 +174,7 @@ function StudentDashboard() {
 
     setError("");
     setSuccess("");
-    
+
     if (!window.confirm(`Are you sure you want to apply for "${jobTitle}"?`)) {
       return;
     }
@@ -153,13 +185,28 @@ function StudentDashboard() {
     try {
       await applyForDrive(driveId);
       setSuccess(`Applied to "${jobTitle}" successfully!`);
-      
-      // Refresh drives and applications list
-      const drivesData = await getStudentDrives();
-      setDrives(drivesData);
-      
-      const appsData = await getStudentApplications();
-      setApplications(appsData);
+
+      // Refresh drives and applications list (handle errors silently)
+      try {
+        const drivesData = await getStudentDrives();
+        setDrives(drivesData);
+      } catch (refreshErr) {
+        console.error("Failed to refresh drives:", refreshErr);
+      }
+
+      try {
+        const appsData = await getStudentApplications();
+        setApplications(appsData);
+      } catch (refreshErr) {
+        console.error("Failed to refresh applications:", refreshErr);
+      }
+
+      // Refresh dashboard stats (handle errors silently)
+      try {
+        await fetchDashboardStats();
+      } catch (refreshErr) {
+        console.error("Failed to refresh dashboard stats:", refreshErr);
+      }
 
       // Clear success message after 5 seconds (with ref tracking for cleanup)
       successTimeoutRef.current = setTimeout(() => setSuccess(""), 5000);
@@ -219,6 +266,155 @@ function StudentDashboard() {
 
       {error && <div className="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">{error}</div>}
       {success && <div className="alert alert-success alert-dismissible fade show shadow-sm" role="alert">{success}</div>}
+
+      {/* Dashboard Stats Cards */}
+      {loadingStats ? (
+        <div className="text-center py-4 mb-4">
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Loading stats...</span>
+          </div>
+        </div>
+      ) : stats && (
+        <>
+          <div className="row g-4 mb-4">
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Eligible Drives</h6>
+                      <h3 className="fw-bold text-primary mb-0">{stats.eligible_drives}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-primary bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-briefcase-fill text-primary fs-4"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Applied</h6>
+                      <h3 className="fw-bold text-info mb-0">{stats.applied_drives}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-info bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-send-fill text-info fs-4"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Interviews</h6>
+                      <h3 className="fw-bold text-secondary mb-0">{stats.interviews}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-secondary bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-calendar-check-fill text-secondary fs-4"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Selected</h6>
+                      <h3 className="fw-bold text-success mb-0">{stats.selected}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-success bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-check-circle-fill text-success fs-4"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Rejected</h6>
+                      <h3 className="fw-bold text-danger mb-0">{stats.rejected}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-danger bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-x-circle-fill text-danger fs-4"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Waiting</h6>
+                      <h3 className="fw-bold text-warning mb-0">{stats.waiting}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-warning bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-clock-fill text-warning fs-4"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Application Progress Chart */}
+          <div className="row g-4 mb-4">
+            <div className="col-md-6">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-header bg-white py-3">
+                  <h5 className="card-title fw-bold mb-0">Application Progress</h5>
+                </div>
+                <div className="card-body p-4">
+                  <Doughnut
+                    data={{
+                      labels: ['Eligible', 'Applied', 'Interview', 'Selected'],
+                      datasets: [{
+                        data: [stats.eligible_drives, stats.applied_drives, stats.interviews, stats.selected],
+                        backgroundColor: ['#007bff', '#17a2b8', '#6c757d', '#28a745'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                      }]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: true,
+                      plugins: {
+                        legend: {
+                          position: 'bottom'
+                        }
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Tabs Navigation */}
       <div className="card border-0 bg-light p-2 mb-4">

@@ -1,5 +1,26 @@
 import { useState, useEffect } from "react";
 import { getCompanyDrives, createDrive, closeDrive, getDriveApplicants, scheduleInterview, getDriveResults, updateApplicationResult, getCompanyDashboardStats } from "../services/driveService";
+import { Pie, Bar } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+} from "chart.js";
+
+ChartJS.register(
+  ArcElement,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title
+);
 
 function CompanyDashboard() {
   const [drives, setDrives] = useState([]);
@@ -60,6 +81,7 @@ function CompanyDashboard() {
       setStats(data);
     } catch (err) {
       console.error("Error fetching dashboard stats:", err);
+      setError("Failed to load dashboard statistics");
     } finally {
       setLoadingStats(false);
     }
@@ -92,13 +114,37 @@ function CompanyDashboard() {
       setError("Please select at least one eligible branch.");
       return;
     }
+
+    // Validate CGPA between 0 and 10
+    const cgpaValue = parseFloat(eligibilityCgpa);
+    if (isNaN(cgpaValue) || cgpaValue < 0 || cgpaValue > 10) {
+      setError("Eligibility CGPA must be between 0 and 10.");
+      return;
+    }
+
+    // Validate package > 0
+    const packageValue = parseFloat(packageLpa);
+    if (isNaN(packageValue) || packageValue <= 0) {
+      setError("Package (LPA) must be greater than 0.");
+      return;
+    }
+
+    // Validate deadline not in the past
+    const deadlineDate = new Date(applicationDeadline);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (deadlineDate < today) {
+      setError("Application deadline cannot be in the past.");
+      return;
+    }
+
     try {
       setSubmitting(true);
       await createDrive({
         job_title: jobTitle,
         job_description: jobDescription,
-        eligibility_cgpa: parseFloat(eligibilityCgpa),
-        package_lpa: parseFloat(packageLpa),
+        eligibility_cgpa: cgpaValue,
+        package_lpa: packageValue,
         application_deadline: applicationDeadline,
         eligible_branches: selectedBranches
       });
@@ -113,27 +159,25 @@ function CompanyDashboard() {
       setApplicationDeadline("");
       setSelectedBranches([]);
 
-      // 1. Programmatically close the modal safely after successful database insertion
+      // Refresh data first
+      await fetchDrives();
+      await fetchDashboardStats();
+
+      // Then close modal after data is refreshed
       const modalElement = document.getElementById("createDriveModal");
       const modalInstance = window.bootstrap?.Modal.getInstance(modalElement);
       if (modalInstance) {
         modalInstance.hide();
       }
 
-      // 2. Refresh list
-      fetchDrives();
-
       // Clear success message after 5 seconds
       setTimeout(() => setSuccess(""), 5000);
-    
-
-    
-    }catch (err) {
-    setError(err.response?.data?.message || "Failed to create placement drive");
-  } finally {
-    setSubmitting(false);
-  }
-};
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to create placement drive");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
 const handleCloseDrive = async (driveId) => {
   setError("");
@@ -206,6 +250,9 @@ const handleScheduleInterview = async (e) => {
     // Refresh applicants
     handleViewApplicants(selectedDrive);
 
+    // Refresh dashboard stats
+    fetchDashboardStats();
+
     setTimeout(() => setSuccess(""), 5000);
   } catch (err) {
     setError(err.response?.data?.message || "Failed to schedule interview");
@@ -233,12 +280,15 @@ const handleUpdateResult = async (applicationId, result) => {
   try {
     await updateApplicationResult(applicationId, result);
     setSuccess("Result updated successfully!");
-    
+
     // Update local state without refresh
-    setResults(results.map(r => 
+    setResults(results.map(r =>
       r.application_id === applicationId ? { ...r, result } : r
     ));
-    
+
+    // Refresh dashboard stats
+    fetchDashboardStats();
+
     setTimeout(() => setSuccess(""), 5000);
   } catch (err) {
     setError(err.response?.data?.message || "Failed to update result");
@@ -265,6 +315,193 @@ return (
 
     {error && <div className="alert alert-danger alert-dismissible fade show" role="alert">{error}</div>}
     {success && <div className="alert alert-success alert-dismissible fade show" role="alert">{success}</div>}
+
+    {/* Dashboard Stats Cards */}
+    {loadingStats ? (
+      <div className="text-center py-4 mb-4">
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Loading stats...</span>
+        </div>
+      </div>
+    ) : stats && (
+      <>
+        <div className="row g-4 mb-4">
+          <div className="col-md-6 col-lg-2">
+            <div className="card border-0 shadow-sm h-100">
+              <div className="card-body p-4">
+                <div className="d-flex align-items-center">
+                  <div className="flex-grow-1">
+                    <h6 className="text-muted mb-1">Total Drives</h6>
+                    <h3 className="fw-bold text-primary mb-0">{stats.total_drives}</h3>
+                  </div>
+                  <div className="ms-3">
+                    <div className="bg-primary bg-opacity-10 rounded-circle p-3">
+                      <i className="bi bi-briefcase-fill text-primary fs-4"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-6 col-lg-2">
+            <div className="card border-0 shadow-sm h-100">
+              <div className="card-body p-4">
+                <div className="d-flex align-items-center">
+                  <div className="flex-grow-1">
+                    <h6 className="text-muted mb-1">Applications</h6>
+                    <h3 className="fw-bold text-info mb-0">{stats.total_applications}</h3>
+                  </div>
+                  <div className="ms-3">
+                    <div className="bg-info bg-opacity-10 rounded-circle p-3">
+                      <i className="bi bi-file-earmark-text-fill text-info fs-4"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-6 col-lg-2">
+            <div className="card border-0 shadow-sm h-100">
+              <div className="card-body p-4">
+                <div className="d-flex align-items-center">
+                  <div className="flex-grow-1">
+                    <h6 className="text-muted mb-1">Interviews</h6>
+                    <h3 className="fw-bold text-secondary mb-0">{stats.interviews_scheduled}</h3>
+                  </div>
+                  <div className="ms-3">
+                    <div className="bg-secondary bg-opacity-10 rounded-circle p-3">
+                      <i className="bi bi-calendar-check-fill text-secondary fs-4"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-6 col-lg-2">
+            <div className="card border-0 shadow-sm h-100">
+              <div className="card-body p-4">
+                <div className="d-flex align-items-center">
+                  <div className="flex-grow-1">
+                    <h6 className="text-muted mb-1">Selected</h6>
+                    <h3 className="fw-bold text-success mb-0">{stats.selected_students}</h3>
+                  </div>
+                  <div className="ms-3">
+                    <div className="bg-success bg-opacity-10 rounded-circle p-3">
+                      <i className="bi bi-check-circle-fill text-success fs-4"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-6 col-lg-2">
+            <div className="card border-0 shadow-sm h-100">
+              <div className="card-body p-4">
+                <div className="d-flex align-items-center">
+                  <div className="flex-grow-1">
+                    <h6 className="text-muted mb-1">Rejected</h6>
+                    <h3 className="fw-bold text-danger mb-0">{stats.rejected_students}</h3>
+                  </div>
+                  <div className="ms-3">
+                    <div className="bg-danger bg-opacity-10 rounded-circle p-3">
+                      <i className="bi bi-x-circle-fill text-danger fs-4"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-6 col-lg-2">
+            <div className="card border-0 shadow-sm h-100">
+              <div className="card-body p-4">
+                <div className="d-flex align-items-center">
+                  <div className="flex-grow-1">
+                    <h6 className="text-muted mb-1">Waiting</h6>
+                    <h3 className="fw-bold text-warning mb-0">{stats.waiting_students}</h3>
+                  </div>
+                  <div className="ms-3">
+                    <div className="bg-warning bg-opacity-10 rounded-circle p-3">
+                      <i className="bi bi-clock-fill text-warning fs-4"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Charts Section */}
+        <div className="row g-4 mb-4">
+          <div className="col-md-6">
+            <div className="card border-0 shadow-sm h-100">
+              <div className="card-header bg-white py-3">
+                <h5 className="card-title fw-bold mb-0">Drive Status</h5>
+              </div>
+              <div className="card-body p-4">
+                <Pie
+                  data={{
+                    labels: ['Approved', 'Pending', 'Closed'],
+                    datasets: [{
+                      data: [stats.approved_drives, stats.pending_drives, stats.closed_drives],
+                      backgroundColor: ['#28a745', '#ffc107', '#6c757d'],
+                      borderWidth: 2,
+                      borderColor: '#ffffff'
+                    }]
+                  }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                      legend: {
+                        position: 'bottom'
+                      }
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="col-md-6">
+            <div className="card border-0 shadow-sm h-100">
+              <div className="card-header bg-white py-3">
+                <h5 className="card-title fw-bold mb-0">Student Results</h5>
+              </div>
+              <div className="card-body p-4">
+                <Bar
+                  data={{
+                    labels: ['Selected', 'Rejected', 'Waiting'],
+                    datasets: [{
+                      label: 'Students',
+                      data: [stats.selected_students, stats.rejected_students, stats.waiting_students],
+                      backgroundColor: ['#28a745', '#dc3545', '#ffc107'],
+                      borderWidth: 1,
+                      borderColor: ['#28a745', '#dc3545', '#ffc107']
+                    }]
+                  }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                      legend: {
+                        display: false
+                      }
+                    },
+                    scales: {
+                      y: {
+                        beginAtZero: true,
+                        ticks: {
+                          stepSize: 1
+                        }
+                      }
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
+    )}
 
     <div className="row mb-4">
       <div className="col-12 text-end">

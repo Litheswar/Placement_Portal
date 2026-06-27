@@ -24,6 +24,6 @@ export const updateCompanyStatus = async (companyId, status) => {
 };
 
 export const getAdminDashboardStats = async () => {
-  const response = await axios.get(`${API_BASE}/auth/admin/dashboard`, getHeaders());
+  const response = await axios.get(`${API_BASE}/admin/dashboard`, getHeaders());
   return response.data;
 };
