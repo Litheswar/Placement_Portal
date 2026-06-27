@@ -63,3 +63,33 @@ export const getStudentApplications = async () => {
   return response.data;
 };
 
+export const getDriveApplicants = async (driveId) => {
+  const response = await axios.get(`${API_BASE}/company/drives/${driveId}/applications`, getHeaders());
+  return response.data;
+};
+
+export const scheduleInterview = async (data) => {
+  const response = await axios.post(`${API_BASE}/company/interviews`, data, getHeaders());
+  return response.data;
+};
+
+export const getDriveResults = async (driveId) => {
+  const response = await axios.get(`${API_BASE}/company/drives/${driveId}/results`, getHeaders());
+  return response.data;
+};
+
+export const updateApplicationResult = async (applicationId, result) => {
+  const response = await axios.patch(`${API_BASE}/company/applications/${applicationId}/result`, { result }, getHeaders());
+  return response.data;
+};
+
+export const getCompanyDashboardStats = async () => {
+  const response = await axios.get(`${API_BASE}/company/dashboard`, getHeaders());
+  return response.data;
+};
+
+export const getStudentDashboardStats = async () => {
+  const response = await axios.get(`${API_BASE}/student/dashboard`, getHeaders());
+  return response.data;
+};
+

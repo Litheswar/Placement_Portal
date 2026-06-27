@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { getAdminDrives, updateDriveStatus } from "../services/driveService";
-import { getAdminCompanies, updateCompanyStatus } from "../services/companyService";
+import { getAdminCompanies, updateCompanyStatus, getAdminDashboardStats } from "../services/companyService";
 
 function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("companies"); // companies or drives
@@ -10,6 +10,10 @@ function AdminDashboard() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [filterStatus, setFilterStatus] = useState("pending"); // pending, approved, rejected, or all
+
+  // Dashboard Stats
+  const [stats, setStats] = useState(null);
+  const [loadingStats, setLoadingStats] = useState(true);
 
   const fetchDrives = async () => {
     try {
@@ -38,6 +42,22 @@ function AdminDashboard() {
       setLoading(false);
     }
   };
+
+  const fetchDashboardStats = async () => {
+    try {
+      setLoadingStats(true);
+      const data = await getAdminDashboardStats();
+      setStats(data);
+    } catch (err) {
+      console.error("Error fetching dashboard stats:", err);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardStats();
+  }, []);
 
   useEffect(() => {
     if (activeTab === "companies") {
@@ -103,6 +123,86 @@ function AdminDashboard() {
 
       {error && <div className="alert alert-danger alert-dismissible fade show" role="alert">{error}</div>}
       {success && <div className="alert alert-success alert-dismissible fade show" role="alert">{success}</div>}
+
+      {/* Dashboard Stats Cards */}
+      {loadingStats ? (
+        <div className="text-center py-4">
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Loading stats...</span>
+          </div>
+        </div>
+      ) : stats && (
+        <div className="row g-4 mb-4">
+          <div className="col-md-6 col-lg-3">
+            <div className="card border-0 shadow-sm h-100">
+              <div className="card-body p-4">
+                <div className="d-flex align-items-center">
+                  <div className="flex-grow-1">
+                    <h6 className="text-muted mb-1">Total Students</h6>
+                    <h3 className="fw-bold text-primary mb-0">{stats.total_students}</h3>
+                  </div>
+                  <div className="ms-3">
+                    <div className="bg-primary bg-opacity-10 rounded-circle p-3">
+                      <i className="bi bi-people-fill text-primary fs-4"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-6 col-lg-3">
+            <div className="card border-0 shadow-sm h-100">
+              <div className="card-body p-4">
+                <div className="d-flex align-items-center">
+                  <div className="flex-grow-1">
+                    <h6 className="text-muted mb-1">Total Companies</h6>
+                    <h3 className="fw-bold text-success mb-0">{stats.total_companies}</h3>
+                  </div>
+                  <div className="ms-3">
+                    <div className="bg-success bg-opacity-10 rounded-circle p-3">
+                      <i className="bi bi-building-fill text-success fs-4"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-6 col-lg-3">
+            <div className="card border-0 shadow-sm h-100">
+              <div className="card-body p-4">
+                <div className="d-flex align-items-center">
+                  <div className="flex-grow-1">
+                    <h6 className="text-muted mb-1">Placement Drives</h6>
+                    <h3 className="fw-bold text-info mb-0">{stats.total_drives}</h3>
+                  </div>
+                  <div className="ms-3">
+                    <div className="bg-info bg-opacity-10 rounded-circle p-3">
+                      <i className="bi bi-briefcase-fill text-info fs-4"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-6 col-lg-3">
+            <div className="card border-0 shadow-sm h-100">
+              <div className="card-body p-4">
+                <div className="d-flex align-items-center">
+                  <div className="flex-grow-1">
+                    <h6 className="text-muted mb-1">Total Applications</h6>
+                    <h3 className="fw-bold text-warning mb-0">{stats.total_applications}</h3>
+                  </div>
+                  <div className="ms-3">
+                    <div className="bg-warning bg-opacity-10 rounded-circle p-3">
+                      <i className="bi bi-file-earmark-text-fill text-warning fs-4"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Tab Switcher */}
       <div className="card border-0 bg-light p-2 mb-4">

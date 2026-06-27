@@ -22,3 +22,8 @@ export const updateCompanyStatus = async (companyId, status) => {
   const response = await axios.patch(`${API_BASE}/auth/admin/companies/${companyId}`, { approval_status: status }, getHeaders());
   return response.data;
 };
+
+export const getAdminDashboardStats = async () => {
+  const response = await axios.get(`${API_BASE}/auth/admin/dashboard`, getHeaders());
+  return response.data;
+};

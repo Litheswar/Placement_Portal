@@ -2,10 +2,13 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token
 from werkzeug.security import check_password_hash, generate_password_hash
 from extensions import db
+from sqlalchemy import select, func
 
 from app.models.admin import Admin
 from app.models.student import Student
 from app.models.company import Company
+from app.models.placement_drive import PlacementDrive
+from app.models.application import Application
 
 from app.decorators.roles import admin_required, student_required, company_required
 
@@ -319,4 +322,32 @@ def admin_update_company_status(company_id):
             "name": company.name,
             "status": company.approval_status
         }
+    }), 200
+
+
+# -------------- Admin: Dashboard Stats -------------
+
+@auth_bp.route("/admin/dashboard", methods=["GET"])
+@admin_required
+def admin_dashboard_stats():
+    total_students = db.session.scalar(select(func.count()).select_from(Student))
+    total_companies = db.session.scalar(select(func.count()).select_from(Company))
+    approved_companies = db.session.scalar(select(func.count()).select_from(Company).filter_by(approval_status="approved"))
+    pending_companies = db.session.scalar(select(func.count()).select_from(Company).filter_by(approval_status="pending"))
+    total_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive))
+    approved_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive).filter_by(status="approved"))
+    pending_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive).filter_by(status="pending"))
+    total_applications = db.session.scalar(select(func.count()).select_from(Application))
+    selected_students = db.session.scalar(select(func.count()).select_from(Application).filter_by(result="selected"))
+    
+    return jsonify({
+        "total_students": total_students or 0,
+        "total_companies": total_companies or 0,
+        "approved_companies": approved_companies or 0,
+        "pending_companies": pending_companies or 0,
+        "total_drives": total_drives or 0,
+        "approved_drives": approved_drives or 0,
+        "pending_drives": pending_drives or 0,
+        "total_applications": total_applications or 0,
+        "selected_students": selected_students or 0
     }), 200
