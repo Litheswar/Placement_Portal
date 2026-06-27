@@ -5,7 +5,7 @@ from extensions import db, migrate, jwt
 from app.models import *
 from app.routes.auth import auth_bp
 from app.routes.drives import drives_bp
-
+from app.routes.interviews import interviews_bp
 from flask_cors import CORS
 
 def create_app():
@@ -13,7 +13,10 @@ def create_app():
     
     app.config.from_object(Config)
     
-    CORS(app)
+    CORS(
+        app,
+        resources={r"/*": {"origins": "*"}}
+    )
     
     db.init_app(app)
     migrate.init_app(app, db)
@@ -21,7 +24,7 @@ def create_app():
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(drives_bp)
-    
+    app.register_blueprint(interviews_bp)
     
     @app.route("/")
     def home():

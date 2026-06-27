@@ -74,6 +74,7 @@ class Student(db.Model):
 
     applications = db.relationship(
         "Application",
-        backref="student",
+        back_populates="student",
+        cascade="all, delete-orphan",
         lazy=True
     )

@@ -201,12 +201,30 @@ return (
                     </td>
                     <td className="pe-4 text-end">
                       {drive.status === "approved" && (
-                        <button
-                          className="btn btn-outline-danger btn-sm"
-                          onClick={() => handleCloseDrive(drive.id)}
-                        >
-                          Close Drive
-                        </button>
+                        <div className="d-flex gap-2 justify-content-end">
+  <button
+    className="btn btn-primary btn-sm"
+    data-bs-toggle="modal"
+    data-bs-target="#scheduleInterviewModal"
+  >
+    Schedule Interview
+  </button>
+
+  <button
+    className="btn btn-success btn-sm"
+    data-bs-toggle="modal"
+    data-bs-target="#updateResultModal"
+  >
+    Update Result
+  </button>
+
+  <button
+    className="btn btn-outline-danger btn-sm"
+    onClick={() => handleCloseDrive(drive.id)}
+  >
+    Close Drive
+  </button>
+</div>
                       )}
                       {drive.status !== "approved" && (
                         <button className="btn btn-outline-secondary btn-sm" disabled>

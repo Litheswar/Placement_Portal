@@ -10,7 +10,7 @@ from app.decorators.roles import company_required, admin_required, student_requi
 from datetime import datetime, date
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
-
+from app.models.interview_schedule import InterviewSchedule
 drives_bp = Blueprint("drives", __name__, url_prefix="/api")
 
 # Helper: Safely parse JWT identities
@@ -520,20 +520,21 @@ def company_close_drive(drive_id):
     }), 200
 
 
-# 6. Company: Get own drives
 @drives_bp.route("/company/drives", methods=["GET"])
 @company_required
 def company_list_drives():
+
     company_id = safe_get_jwt_id()
-    if company_id is None:
-        return jsonify({"message": "Invalid authentication token payload"}), 401
-    
+
     stmt = select(PlacementDrive).filter_by(company_id=company_id)
+
     drives = db.session.scalars(stmt).all()
-    
+
     result = []
+
     for d in drives:
         branches_list = [b.strip() for b in d.eligible_branches.split(",") if b.strip()]
+
         result.append({
             "id": d.id,
             "job_title": d.job_title,
@@ -545,5 +546,39 @@ def company_list_drives():
             "status": d.status,
             "created_at": d.created_at.strftime("%Y-%m-%d %H:%M:%S") if d.created_at else None
         })
-        
+
+    return jsonify(result), 200@drives_bp.route("/company/drives/<int:drive_id>/applications", methods=["GET"])
+@company_required
+def company_get_drive_applications(drive_id):
+
+    company_id = safe_get_jwt_id()
+
+    drive = db.session.get(PlacementDrive, drive_id)
+
+    if not drive:
+        return jsonify({"message": "Drive not found"}), 404
+
+    if drive.company_id != company_id:
+        return jsonify({"message": "Unauthorized"}), 403
+
+    applications = db.session.scalars(
+        select(Application)
+        .filter_by(drive_id=drive_id)
+        .options(db.joinedload(Application.student))
+    ).all()
+
+    result = []
+
+    for app in applications:
+        result.append({
+            "application_id": app.id,
+            "student_id": app.student.id,
+            "student_name": app.student.name,
+            "email": app.student.email,
+            "roll_number": app.student.roll_number,
+            "branch": app.student.branch,
+            "cgpa": app.student.cgpa,
+            "status": app.status
+        })
+
     return jsonify(result), 200

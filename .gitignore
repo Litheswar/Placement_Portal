@@ -4,6 +4,7 @@ __pycache__/
 *.pyc
 # Virtual environment
 backend/venv/
+backend/macvenv/
 # VSCode settings
 .vscode/
 # IDE metadata

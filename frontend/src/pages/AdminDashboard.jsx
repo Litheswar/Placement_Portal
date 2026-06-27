@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react";
 import { getAdminDrives, updateDriveStatus } from "../services/driveService";
+import { getAdminCompanies, updateCompanyStatus } from "../services/companyService";
 
 function AdminDashboard() {
+  const [activeTab, setActiveTab] = useState("companies"); // companies or drives
   const [drives, setDrives] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -21,9 +24,28 @@ function AdminDashboard() {
     }
   };
 
+  const fetchCompanies = async () => {
+    try {
+      setLoading(true);
+      const data = await getAdminCompanies(filterStatus === "all" ? "" : filterStatus);
+      setCompanies(data);
+      setError("");
+    } catch (err) {
+      console.error("Error fetching companies:", err);
+      const errorMsg = err.response?.data?.message || err.message || "Failed to fetch companies";
+      setError(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetchDrives();
-  }, [filterStatus]);
+    if (activeTab === "companies") {
+      fetchCompanies();
+    } else {
+      fetchDrives();
+    }
+  }, [activeTab, filterStatus]);
 
   const handleUpdateStatus = async (driveId, status) => {
     setError("");
@@ -43,6 +65,24 @@ function AdminDashboard() {
     }
   };
 
+  const handleUpdateCompanyStatus = async (companyId, status) => {
+    setError("");
+    setSuccess("");
+    const actionText = status === "approved" ? "approve" : "reject";
+    if (!window.confirm(`Are you sure you want to ${actionText} this company?`)) {
+      return;
+    }
+
+    try {
+      await updateCompanyStatus(companyId, status);
+      setSuccess(`Company has been successfully ${status}.`);
+      fetchCompanies();
+      setTimeout(() => setSuccess(""), 5000);
+    } catch (err) {
+      setError(err.response?.data?.message || `Failed to ${actionText} company`);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("role");
@@ -54,7 +94,7 @@ function AdminDashboard() {
       <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
           <h1 className="fw-bold text-primary">Admin Dashboard</h1>
-          <p className="text-muted">Review, approve, and manage campus placement drives</p>
+          <p className="text-muted">Review, approve, and manage company registrations and placement drives</p>
         </div>
         <button className="btn btn-outline-danger" onClick={handleLogout}>
           Logout
@@ -64,11 +104,29 @@ function AdminDashboard() {
       {error && <div className="alert alert-danger alert-dismissible fade show" role="alert">{error}</div>}
       {success && <div className="alert alert-success alert-dismissible fade show" role="alert">{success}</div>}
 
+      {/* Main Tab Switcher */}
+      <div className="card border-0 bg-light p-2 mb-4">
+        <div className="nav nav-pills nav-fill">
+          <button 
+            className={`nav-link fw-semibold py-2 ${activeTab === "companies" ? "active bg-primary text-white" : "text-dark"}`}
+            onClick={() => { setActiveTab("companies"); setFilterStatus("pending"); }}
+          >
+            Company Approvals
+          </button>
+          <button 
+            className={`nav-link fw-semibold py-2 ${activeTab === "drives" ? "active bg-primary text-white" : "text-dark"}`}
+            onClick={() => { setActiveTab("drives"); setFilterStatus("pending"); }}
+          >
+            Placement Drives
+          </button>
+        </div>
+      </div>
+
       {/* Filter Tabs */}
       <div className="card border-0 bg-light p-2 mb-4">
         <div className="nav nav-pills nav-fill">
           <button 
-            className={`nav-link fw-semibold py-2 ${filterStatus === "pending" ? "active bg-primary text-white" : "text-dark"}`}
+            className={`nav-link fw-semibold py-2 ${filterStatus === "pending" ? "active bg-warning text-dark" : "text-dark"}`}
             onClick={() => setFilterStatus("pending")}
           >
             Pending Review
@@ -89,7 +147,7 @@ function AdminDashboard() {
             className={`nav-link fw-semibold py-2 ${filterStatus === "all" ? "active bg-secondary text-white" : "text-dark"}`}
             onClick={() => setFilterStatus("all")}
           >
-            All Drives
+            All
           </button>
         </div>
       </div>
@@ -100,9 +158,91 @@ function AdminDashboard() {
             <span className="visually-hidden">Loading...</span>
           </div>
         </div>
+      ) : activeTab === "companies" ? (
+        companies.length === 0 ? (
+          <div className="text-center py-5 bg-white rounded border border-light shadow-sm">
+            <h5 className="text-muted">No companies found for status '{filterStatus}'</h5>
+          </div>
+        ) : (
+          <div className="row g-4">
+            {companies.map((company) => (
+              <div className="col-12" key={company.id}>
+                <div className="card shadow-sm border-0 h-100">
+                  <div className="card-body p-4">
+                    <div className="row g-4">
+                      <div className="col-lg-8">
+                        <div className="d-flex justify-content-between align-items-start mb-3">
+                          <h4 className="fw-bold text-dark mb-0">{company.name}</h4>
+                          {company.status === "pending" && <span className="badge bg-warning text-dark px-3 py-2">Pending Review</span>}
+                          {company.status === "approved" && <span className="badge bg-success px-3 py-2">Approved</span>}
+                          {company.status === "rejected" && <span className="badge bg-danger px-3 py-2">Rejected</span>}
+                        </div>
+                        
+                        <div className="row g-3 mb-3">
+                          <div className="col-md-6">
+                            <span className="text-muted d-block small">EMAIL</span>
+                            <span className="fw-bold text-dark">{company.email}</span>
+                          </div>
+                          <div className="col-md-6">
+                            <span className="text-muted d-block small">HR CONTACT</span>
+                            <span className="fw-bold text-dark">{company.hr_contact}</span>
+                          </div>
+                          {company.website && (
+                            <div className="col-md-6">
+                              <span className="text-muted d-block small">WEBSITE</span>
+                              <a href={company.website} target="_blank" rel="noopener noreferrer" className="fw-bold text-primary text-decoration-none">
+                                {company.website}
+                              </a>
+                            </div>
+                          )}
+                          {company.industry && (
+                            <div className="col-md-6">
+                              <span className="text-muted d-block small">INDUSTRY</span>
+                              <span className="fw-bold text-dark">{company.industry}</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {company.description && (
+                          <div className="mb-3">
+                            <span className="text-muted d-block small mb-1">DESCRIPTION</span>
+                            <p className="text-muted mb-0" style={{ whiteSpace: "pre-line" }}>{company.description}</p>
+                          </div>
+                        )}
+                        
+                        <div className="small text-muted">
+                          <strong>Registered:</strong> {company.created_at}
+                        </div>
+                      </div>
+
+                      <div className="col-lg-4 d-flex flex-column justify-content-between">
+                        {company.status === "pending" && (
+                          <div className="d-flex flex-column gap-2">
+                            <button 
+                              className="btn btn-success py-2 fw-semibold"
+                              onClick={() => handleUpdateCompanyStatus(company.id, "approved")}
+                            >
+                              Approve Company
+                            </button>
+                            <button 
+                              className="btn btn-outline-danger py-2 fw-semibold"
+                              onClick={() => handleUpdateCompanyStatus(company.id, "rejected")}
+                            >
+                              Reject Company
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
       ) : drives.length === 0 ? (
         <div className="text-center py-5 bg-white rounded border border-light shadow-sm">
-          <h5 className="text-muted">No placement drives found for state '{filterStatus}'</h5>
+          <h5 className="text-muted">No placement drives found for status '{filterStatus}'</h5>
         </div>
       ) : (
         <div className="row g-4">

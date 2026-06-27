@@ -256,3 +256,67 @@ def company_profile():
     return jsonify({
         "message": "Welcome Company"
     })
+
+
+# -------------- Admin: Company Approval -------------
+
+@auth_bp.route("/admin/companies", methods=["GET"])
+@admin_required
+def admin_list_companies():
+    status = request.args.get("status")
+    
+    query = Company.query
+    if status:
+        query = query.filter_by(approval_status=status)
+    
+    companies = query.order_by(Company.created_at.desc()).all()
+    
+    result = []
+    for company in companies:
+        result.append({
+            "id": company.id,
+            "name": company.name,
+            "email": company.email,
+            "hr_contact": company.hr_contact,
+            "website": company.website,
+            "industry": company.industry,
+            "description": company.description,
+            "status": company.approval_status,
+            "is_active": company.is_active,
+            "created_at": company.created_at.strftime("%Y-%m-%d %H:%M:%S") if company.created_at else None
+        })
+    
+    return jsonify(result), 200
+
+
+@auth_bp.route("/admin/companies/<int:company_id>", methods=["PATCH"])
+@admin_required
+def admin_update_company_status(company_id):
+    company = Company.query.get(company_id)
+    if not company:
+        return jsonify({"message": "Company not found"}), 404
+    
+    data = request.get_json()
+    if not data or "approval_status" not in data:
+        return jsonify({"message": "Missing approval_status in request body"}), 400
+    
+    new_status = data["approval_status"]
+    if new_status not in ["approved", "rejected"]:
+        return jsonify({"message": "Invalid status. Must be 'approved' or 'rejected'"}), 400
+    
+    company.approval_status = new_status
+    
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": "An error occurred while updating company status"}), 500
+    
+    return jsonify({
+        "message": f"Company status updated to '{new_status}' successfully",
+        "company": {
+            "id": company.id,
+            "name": company.name,
+            "status": company.approval_status
+        }
+    }), 200

@@ -32,31 +32,71 @@ function ApplicationsTab({ applications }) {
         <div className="table-responsive bg-white rounded border shadow-sm">
           <table className="table table-hover align-middle mb-0">
             <thead className="table-light">
-              <tr>
-                <th className="ps-4">Company Name</th>
-                <th>Job Title</th>
-                <th>Package</th>
-                <th>Deadline</th>
-                <th>Applied On</th>
-                <th>Status</th>
-              </tr>
+             <tr>
+                  <th className="ps-4">Company</th>
+                  <th>Job Title</th>
+                  <th>Status</th>
+                  <th>Interview Date</th>
+                  <th>Mode</th>
+                  <th>Location / Link</th>
+                  <th>Result</th>
+              </tr> 
             </thead>
             <tbody>
-              {applications.map((app) => (
-                <tr key={app.id}>
-                  <td className="ps-4 fw-semibold text-dark">{app.drive.company_name}</td>
-                  <td>{app.drive.job_title}</td>
-                  <td>{app.drive.package_lpa} LPA</td>
-                  <td>{app.drive.application_deadline}</td>
-                  <td>{formatDate(app.applied_on)}</td>
-                  <td>
-                    <span className={`badge px-3 py-2 text-capitalize ${getStatusBadgeClass(app.status)}`}>
-                      {app.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+  {applications.map((app) => (
+    <tr key={app.id}>
+      <td className="ps-4 fw-semibold">
+        {app.drive.company_name}
+      </td>
+
+      <td>
+        {app.drive.job_title}
+      </td>
+
+      <td>
+        <span
+          className={`badge px-3 py-2 text-capitalize ${getStatusBadgeClass(
+            app.status
+          )}`}
+        >
+          {app.status}
+        </span>
+      </td>
+
+      <td>
+        {app.interview_date
+          ? formatDate(app.interview_date)
+          : "Not Scheduled"}
+      </td>
+
+      <td>
+        {app.interview_mode || "-"}
+      </td>
+
+      <td>
+        {app.location_or_link || "-"}
+      </td>
+
+      <td>
+        {app.result ? (
+          app.result === "selected" ? (
+            <span className="badge bg-success">
+              Selected
+            </span>
+          ) : (
+            <span className="badge bg-danger">
+              Rejected
+            </span>
+          )
+        ) : (
+          <span className="badge bg-secondary">
+            Pending
+          </span>
+        )}
+      </td>
+    </tr>
+  ))}
+</tbody>
           </table>
         </div>
       )}

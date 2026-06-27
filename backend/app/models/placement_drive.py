@@ -64,6 +64,11 @@ class PlacementDrive(db.Model):
 
     applications = db.relationship(
         "Application",
-        backref="placement_drive",
+        back_populates="placement_drive",
         lazy=True
+    )
+
+    company = db.relationship(
+        "Company",
+        back_populates="drives"
     )
