@@ -3,6 +3,8 @@
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
 
 from app import create_app
 from app.models import Student, Application, PlacementDrive, InterviewSchedule
