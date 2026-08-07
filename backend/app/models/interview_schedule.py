@@ -1,7 +1,6 @@
 from extensions import db
 from datetime import datetime
 
-
 class InterviewSchedule(db.Model):
     __tablename__ = "interview_schedules"
 
@@ -10,9 +9,9 @@ class InterviewSchedule(db.Model):
         primary_key=True
     )
 
-    drive_id = db.Column(
+    application_id = db.Column(
         db.Integer,
-        db.ForeignKey("placement_drives.id"),
+        db.ForeignKey("applications.id"),
         nullable=False,
         unique=True
     )
@@ -39,4 +38,9 @@ class InterviewSchedule(db.Model):
     created_at = db.Column(
         db.DateTime,
         default=datetime.utcnow
+    )
+
+    application = db.relationship(
+        "Application",
+        back_populates="interview_schedule"
     )

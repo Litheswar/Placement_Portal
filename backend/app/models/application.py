@@ -12,8 +12,7 @@ class Application(db.Model):
             name="unique_student_drive"
         ),
     )
-    
-    
+
     id = db.Column(
         db.Integer,
         primary_key=True
@@ -41,8 +40,34 @@ class Application(db.Model):
         default="applied"
     )
 
+    result = db.Column(
+        db.String(20),
+        nullable=True
+    )
+
     updated_at = db.Column(
         db.DateTime,
         default=datetime.utcnow,
         onupdate=datetime.utcnow
+    )
+
+    # ----------------------------
+    # Relationships
+    # ----------------------------
+
+    student = db.relationship(
+        "Student",
+        back_populates="applications"
+    )
+
+    placement_drive = db.relationship(
+        "PlacementDrive",
+        back_populates="applications"
+    )
+
+    interview_schedule = db.relationship(
+        "InterviewSchedule",
+        back_populates="application",
+        uselist=False,
+        cascade="all, delete-orphan"
     )

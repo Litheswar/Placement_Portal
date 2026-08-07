@@ -1,12 +1,40 @@
 import { useState, useEffect } from "react";
 import { getAdminDrives, updateDriveStatus } from "../services/driveService";
+import { getAdminCompanies, updateCompanyStatus, getAdminDashboardStats } from "../services/companyService";
+import { Pie, Doughnut, Bar } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+} from "chart.js";
+
+ChartJS.register(
+  ArcElement,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title
+);
 
 function AdminDashboard() {
+  const [activeTab, setActiveTab] = useState("companies"); // companies or drives
   const [drives, setDrives] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [filterStatus, setFilterStatus] = useState("pending"); // pending, approved, rejected, or all
+
+  // Dashboard Stats
+  const [stats, setStats] = useState(null);
+  const [loadingStats, setLoadingStats] = useState(true);
 
   const fetchDrives = async () => {
     try {
@@ -21,9 +49,45 @@ function AdminDashboard() {
     }
   };
 
+  const fetchCompanies = async () => {
+    try {
+      setLoading(true);
+      const data = await getAdminCompanies(filterStatus === "all" ? "" : filterStatus);
+      setCompanies(data);
+      setError("");
+    } catch (err) {
+      console.error("Error fetching companies:", err);
+      const errorMsg = err.response?.data?.message || err.message || "Failed to fetch companies";
+      setError(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchDashboardStats = async () => {
+    try {
+      setLoadingStats(true);
+      const data = await getAdminDashboardStats();
+      setStats(data);
+    } catch (err) {
+      console.error("Error fetching dashboard stats:", err);
+      setError("Failed to load dashboard statistics");
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
   useEffect(() => {
-    fetchDrives();
-  }, [filterStatus]);
+    fetchDashboardStats();
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "companies") {
+      fetchCompanies();
+    } else {
+      fetchDrives();
+    }
+  }, [activeTab, filterStatus]);
 
   const handleUpdateStatus = async (driveId, status) => {
     setError("");
@@ -43,6 +107,24 @@ function AdminDashboard() {
     }
   };
 
+  const handleUpdateCompanyStatus = async (companyId, status) => {
+    setError("");
+    setSuccess("");
+    const actionText = status === "approved" ? "approve" : "reject";
+    if (!window.confirm(`Are you sure you want to ${actionText} this company?`)) {
+      return;
+    }
+
+    try {
+      await updateCompanyStatus(companyId, status);
+      setSuccess(`Company has been successfully ${status}.`);
+      fetchCompanies();
+      setTimeout(() => setSuccess(""), 5000);
+    } catch (err) {
+      setError(err.response?.data?.message || `Failed to ${actionText} company`);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("role");
@@ -54,7 +136,7 @@ function AdminDashboard() {
       <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
           <h1 className="fw-bold text-primary">Admin Dashboard</h1>
-          <p className="text-muted">Review, approve, and manage campus placement drives</p>
+          <p className="text-muted">Review, approve, and manage company registrations and placement drives</p>
         </div>
         <button className="btn btn-outline-danger" onClick={handleLogout}>
           Logout
@@ -64,11 +146,245 @@ function AdminDashboard() {
       {error && <div className="alert alert-danger alert-dismissible fade show" role="alert">{error}</div>}
       {success && <div className="alert alert-success alert-dismissible fade show" role="alert">{success}</div>}
 
+      {/* Dashboard Stats Cards */}
+      {loadingStats ? (
+        <div className="text-center py-4">
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Loading stats...</span>
+          </div>
+        </div>
+      ) : stats && (
+        <>
+          <div className="row g-4 mb-4">
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Total Students</h6>
+                      <h3 className="fw-bold text-primary mb-0">{stats.total_students}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-primary bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-people-fill text-primary fs-4"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Total Companies</h6>
+                      <h3 className="fw-bold text-success mb-0">{stats.total_companies}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-success bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-building-fill text-success fs-4"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Placement Drives</h6>
+                      <h3 className="fw-bold text-info mb-0">{stats.total_drives}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-info bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-briefcase-fill text-info fs-4"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Applications</h6>
+                      <h3 className="fw-bold text-warning mb-0">{stats.total_applications}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-warning bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-file-earmark-text-fill text-warning fs-4"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Interviews</h6>
+                      <h3 className="fw-bold text-secondary mb-0">{stats.interviews_scheduled}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-secondary bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-calendar-check-fill text-secondary fs-4"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-2">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-center">
+                    <div className="flex-grow-1">
+                      <h6 className="text-muted mb-1">Selected</h6>
+                      <h3 className="fw-bold text-success mb-0">{stats.selected_students}</h3>
+                    </div>
+                    <div className="ms-3">
+                      <div className="bg-success bg-opacity-10 rounded-circle p-3">
+                        <i className="bi bi-check-circle-fill text-success fs-4"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Charts Section */}
+          <div className="row g-4 mb-4">
+            <div className="col-md-4">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-header bg-white py-3">
+                  <h5 className="card-title fw-bold mb-0">Company Status</h5>
+                </div>
+                <div className="card-body p-4">
+                  <Pie
+                    data={{
+                      labels: ['Approved', 'Pending'],
+                      datasets: [{
+                        data: [stats.approved_companies, stats.pending_companies],
+                        backgroundColor: ['#28a745', '#ffc107'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                      }]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: true,
+                      plugins: {
+                        legend: {
+                          position: 'bottom'
+                        }
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="col-md-4">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-header bg-white py-3">
+                  <h5 className="card-title fw-bold mb-0">Drive Status</h5>
+                </div>
+                <div className="card-body p-4">
+                  <Doughnut
+                    data={{
+                      labels: ['Approved', 'Pending', 'Closed'],
+                      datasets: [{
+                        data: [stats.approved_drives, stats.pending_drives, stats.closed_drives],
+                        backgroundColor: ['#28a745', '#ffc107', '#6c757d'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                      }]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: true,
+                      plugins: {
+                        legend: {
+                          position: 'bottom'
+                        }
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="col-md-4">
+              <div className="card border-0 shadow-sm h-100">
+                <div className="card-header bg-white py-3">
+                  <h5 className="card-title fw-bold mb-0">Student Results</h5>
+                </div>
+                <div className="card-body p-4">
+                  <Bar
+                    data={{
+                      labels: ['Selected', 'Rejected', 'Waiting'],
+                      datasets: [{
+                        label: 'Students',
+                        data: [stats.selected_students, stats.rejected_students, stats.waiting_students],
+                        backgroundColor: ['#28a745', '#dc3545', '#ffc107'],
+                        borderWidth: 1,
+                        borderColor: ['#28a745', '#dc3545', '#ffc107']
+                      }]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: true,
+                      plugins: {
+                        legend: {
+                          display: false
+                        }
+                      },
+                      scales: {
+                        y: {
+                          beginAtZero: true,
+                          ticks: {
+                            stepSize: 1
+                          }
+                        }
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Main Tab Switcher */}
+      <div className="card border-0 bg-light p-2 mb-4">
+        <div className="nav nav-pills nav-fill">
+          <button 
+            className={`nav-link fw-semibold py-2 ${activeTab === "companies" ? "active bg-primary text-white" : "text-dark"}`}
+            onClick={() => { setActiveTab("companies"); setFilterStatus("pending"); }}
+          >
+            Company Approvals
+          </button>
+          <button 
+            className={`nav-link fw-semibold py-2 ${activeTab === "drives" ? "active bg-primary text-white" : "text-dark"}`}
+            onClick={() => { setActiveTab("drives"); setFilterStatus("pending"); }}
+          >
+            Placement Drives
+          </button>
+        </div>
+      </div>
+
       {/* Filter Tabs */}
       <div className="card border-0 bg-light p-2 mb-4">
         <div className="nav nav-pills nav-fill">
           <button 
-            className={`nav-link fw-semibold py-2 ${filterStatus === "pending" ? "active bg-primary text-white" : "text-dark"}`}
+            className={`nav-link fw-semibold py-2 ${filterStatus === "pending" ? "active bg-warning text-dark" : "text-dark"}`}
             onClick={() => setFilterStatus("pending")}
           >
             Pending Review
@@ -89,7 +405,7 @@ function AdminDashboard() {
             className={`nav-link fw-semibold py-2 ${filterStatus === "all" ? "active bg-secondary text-white" : "text-dark"}`}
             onClick={() => setFilterStatus("all")}
           >
-            All Drives
+            All
           </button>
         </div>
       </div>
@@ -100,9 +416,91 @@ function AdminDashboard() {
             <span className="visually-hidden">Loading...</span>
           </div>
         </div>
+      ) : activeTab === "companies" ? (
+        companies.length === 0 ? (
+          <div className="text-center py-5 bg-white rounded border border-light shadow-sm">
+            <h5 className="text-muted">No companies found for status '{filterStatus}'</h5>
+          </div>
+        ) : (
+          <div className="row g-4">
+            {companies.map((company) => (
+              <div className="col-12" key={company.id}>
+                <div className="card shadow-sm border-0 h-100">
+                  <div className="card-body p-4">
+                    <div className="row g-4">
+                      <div className="col-lg-8">
+                        <div className="d-flex justify-content-between align-items-start mb-3">
+                          <h4 className="fw-bold text-dark mb-0">{company.name}</h4>
+                          {company.status === "pending" && <span className="badge bg-warning text-dark px-3 py-2">Pending Review</span>}
+                          {company.status === "approved" && <span className="badge bg-success px-3 py-2">Approved</span>}
+                          {company.status === "rejected" && <span className="badge bg-danger px-3 py-2">Rejected</span>}
+                        </div>
+                        
+                        <div className="row g-3 mb-3">
+                          <div className="col-md-6">
+                            <span className="text-muted d-block small">EMAIL</span>
+                            <span className="fw-bold text-dark">{company.email}</span>
+                          </div>
+                          <div className="col-md-6">
+                            <span className="text-muted d-block small">HR CONTACT</span>
+                            <span className="fw-bold text-dark">{company.hr_contact}</span>
+                          </div>
+                          {company.website && (
+                            <div className="col-md-6">
+                              <span className="text-muted d-block small">WEBSITE</span>
+                              <a href={company.website} target="_blank" rel="noopener noreferrer" className="fw-bold text-primary text-decoration-none">
+                                {company.website}
+                              </a>
+                            </div>
+                          )}
+                          {company.industry && (
+                            <div className="col-md-6">
+                              <span className="text-muted d-block small">INDUSTRY</span>
+                              <span className="fw-bold text-dark">{company.industry}</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {company.description && (
+                          <div className="mb-3">
+                            <span className="text-muted d-block small mb-1">DESCRIPTION</span>
+                            <p className="text-muted mb-0" style={{ whiteSpace: "pre-line" }}>{company.description}</p>
+                          </div>
+                        )}
+                        
+                        <div className="small text-muted">
+                          <strong>Registered:</strong> {company.created_at}
+                        </div>
+                      </div>
+
+                      <div className="col-lg-4 d-flex flex-column justify-content-between">
+                        {company.status === "pending" && (
+                          <div className="d-flex flex-column gap-2">
+                            <button 
+                              className="btn btn-success py-2 fw-semibold"
+                              onClick={() => handleUpdateCompanyStatus(company.id, "approved")}
+                            >
+                              Approve Company
+                            </button>
+                            <button 
+                              className="btn btn-outline-danger py-2 fw-semibold"
+                              onClick={() => handleUpdateCompanyStatus(company.id, "rejected")}
+                            >
+                              Reject Company
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
       ) : drives.length === 0 ? (
         <div className="text-center py-5 bg-white rounded border border-light shadow-sm">
-          <h5 className="text-muted">No placement drives found for state '{filterStatus}'</h5>
+          <h5 className="text-muted">No placement drives found for status '{filterStatus}'</h5>
         </div>
       ) : (
         <div className="row g-4">

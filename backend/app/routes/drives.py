@@ -8,9 +8,9 @@ from app.models.student import Student
 from app.models.application import Application
 from app.decorators.roles import company_required, admin_required, student_required
 from datetime import datetime, date
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.exc import SQLAlchemyError
-
+from app.models.interview_schedule import InterviewSchedule
 drives_bp = Blueprint("drives", __name__, url_prefix="/api")
 
 # Helper: Safely parse JWT identities
@@ -456,22 +456,41 @@ def student_get_applications():
     student_id = safe_get_jwt_id()
     if student_id is None:
         return jsonify({"message": "Invalid authentication token payload"}), 401
-    
+
     student = db.session.get(Student, student_id)
     if not student:
         return jsonify({"message": "Student not found"}), 404
-        
-    stmt = select(Application).filter_by(student_id=student_id).options(
-        db.joinedload(Application.placement_drive).joinedload(PlacementDrive.company)
-    )
-    apps = db.session.scalars(stmt).all()
-    
+
+    try:
+        stmt = select(Application).filter_by(student_id=student_id).options(
+            db.joinedload(Application.placement_drive).joinedload(PlacementDrive.company),
+            db.joinedload(Application.interview_schedule)
+        )
+        apps = db.session.scalars(stmt).all()
+    except Exception:
+        # Handle case where interview_schedules table schema is not updated
+        stmt = select(Application).filter_by(student_id=student_id).options(
+            db.joinedload(Application.placement_drive).joinedload(PlacementDrive.company)
+        )
+        apps = db.session.scalars(stmt).all()
+
     result = []
     for app in apps:
+        interview_data = None
+        if hasattr(app, 'interview_schedule') and app.interview_schedule:
+            interview_data = {
+                "interview_date": app.interview_schedule.interview_date.strftime("%Y-%m-%d %H:%M") if app.interview_schedule.interview_date else None,
+                "interview_mode": app.interview_schedule.interview_mode,
+                "location_or_link": app.interview_schedule.location_or_link,
+                "notes": app.interview_schedule.notes
+            }
+
         result.append({
             "id": app.id,
             "applied_on": app.applied_on.strftime("%Y-%m-%d %H:%M:%S") if app.applied_on else None,
             "status": app.status,
+            "result": app.result,
+            "interview": interview_data,
             "drive": {
                 "id": app.placement_drive.id,
                 "job_title": app.placement_drive.job_title,
@@ -480,7 +499,7 @@ def student_get_applications():
                 "company_name": app.placement_drive.company.name
             }
         })
-        
+
     return jsonify(result), 200
 
 
@@ -520,20 +539,21 @@ def company_close_drive(drive_id):
     }), 200
 
 
-# 6. Company: Get own drives
 @drives_bp.route("/company/drives", methods=["GET"])
 @company_required
 def company_list_drives():
+
     company_id = safe_get_jwt_id()
-    if company_id is None:
-        return jsonify({"message": "Invalid authentication token payload"}), 401
-    
+
     stmt = select(PlacementDrive).filter_by(company_id=company_id)
+
     drives = db.session.scalars(stmt).all()
-    
+
     result = []
+
     for d in drives:
         branches_list = [b.strip() for b in d.eligible_branches.split(",") if b.strip()]
+
         result.append({
             "id": d.id,
             "job_title": d.job_title,
@@ -545,5 +565,416 @@ def company_list_drives():
             "status": d.status,
             "created_at": d.created_at.strftime("%Y-%m-%d %H:%M:%S") if d.created_at else None
         })
-        
+
     return jsonify(result), 200
+
+
+@drives_bp.route("/company/drives/<int:drive_id>/applications", methods=["GET"])
+@company_required
+def company_get_drive_applications(drive_id):
+
+    company_id = safe_get_jwt_id()
+
+    drive = db.session.get(PlacementDrive, drive_id)
+
+    if not drive:
+        return jsonify({"message": "Drive not found"}), 404
+
+    if drive.company_id != company_id:
+        return jsonify({"message": "Unauthorized"}), 403
+
+    applications = db.session.scalars(
+        select(Application)
+        .filter_by(drive_id=drive_id)
+        .options(db.joinedload(Application.student))
+    ).all()
+
+    result = []
+
+    for app in applications:
+        result.append({
+            "application_id": app.id,
+            "student_id": app.student.id,
+            "student_name": app.student.name,
+            "email": app.student.email,
+            "roll_number": app.student.roll_number,
+            "branch": app.student.branch,
+            "cgpa": app.student.cgpa,
+            "status": app.status
+        })
+
+    return jsonify(result), 200
+
+
+# 6. Company: Schedule/Update interview for an application
+@drives_bp.route("/company/interviews", methods=["POST"])
+@company_required
+def company_schedule_interview():
+    company_id = safe_get_jwt_id()
+    if company_id is None:
+        return jsonify({"message": "Invalid authentication token payload"}), 401
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({"message": "Request body must be JSON"}), 400
+    
+    application_id = data.get("application_id")
+    if not application_id:
+        return jsonify({"message": "Missing application_id"}), 400
+    
+    interview_date = data.get("interview_date")
+    if not interview_date:
+        return jsonify({"message": "Missing interview_date"}), 400
+    
+    interview_mode = data.get("interview_mode")
+    if not interview_mode or interview_mode not in ["Online", "Offline"]:
+        return jsonify({"message": "Invalid interview_mode. Must be 'Online' or 'Offline'"}), 400
+    
+    location_or_link = data.get("location_or_link")
+    if not location_or_link:
+        return jsonify({"message": "Missing location_or_link"}), 400
+    
+    notes = data.get("notes", "")
+    
+    # Get application and validate
+    application = db.session.get(Application, application_id)
+    if not application:
+        return jsonify({"message": "Application not found"}), 404
+    
+    # Validate that the drive belongs to the logged-in company
+    drive = db.session.get(PlacementDrive, application.drive_id)
+    if not drive:
+        return jsonify({"message": "Placement drive not found"}), 404
+    
+    if drive.company_id != company_id:
+        return jsonify({"message": "Unauthorized: You can only schedule interviews for your own drives"}), 403
+    
+    # Check if interview already exists for this application
+    existing_interview = db.session.scalars(
+        select(InterviewSchedule).filter_by(application_id=application_id)
+    ).first()
+    
+    try:
+        interview_date_parsed = datetime.strptime(interview_date, "%Y-%m-%d %H:%M")
+    except (ValueError, TypeError):
+        return jsonify({"message": "Invalid interview_date format. Use 'YYYY-MM-DD HH:MM'"}), 400
+    
+    if existing_interview:
+        # Update existing interview
+        existing_interview.interview_date = interview_date_parsed
+        existing_interview.interview_mode = interview_mode
+        existing_interview.location_or_link = location_or_link
+        existing_interview.notes = notes
+    else:
+        # Create new interview
+        new_interview = InterviewSchedule(
+            application_id=application_id,
+            interview_date=interview_date_parsed,
+            interview_mode=interview_mode,
+            location_or_link=location_or_link,
+            notes=notes
+        )
+        db.session.add(new_interview)
+    
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"message": "An error occurred while scheduling the interview"}), 500
+    
+    return jsonify({
+        "message": "Interview scheduled successfully"
+    }), 201
+
+
+# 7. Company: Get interview results for a drive
+@drives_bp.route("/company/drives/<int:drive_id>/results", methods=["GET"])
+@company_required
+def company_get_drive_results(drive_id):
+    company_id = safe_get_jwt_id()
+    if company_id is None:
+        return jsonify({"message": "Invalid authentication token payload"}), 401
+    
+    drive = db.session.get(PlacementDrive, drive_id)
+    if not drive:
+        return jsonify({"message": "Drive not found"}), 404
+    
+    if drive.company_id != company_id:
+        return jsonify({"message": "Unauthorized: You can only view results for your own drives"}), 403
+    
+    applications = db.session.scalars(
+        select(Application)
+        .filter_by(drive_id=drive_id)
+        .options(
+            db.joinedload(Application.student),
+            db.joinedload(Application.interview_schedule)
+        )
+    ).all()
+    
+    result = []
+    for app in applications:
+        interview_data = None
+        if app.interview_schedule:
+            interview_data = {
+                "interview_date": app.interview_schedule.interview_date.strftime("%Y-%m-%d %H:%M") if app.interview_schedule.interview_date else None,
+                "interview_mode": app.interview_schedule.interview_mode,
+                "location_or_link": app.interview_schedule.location_or_link
+            }
+        
+        result.append({
+            "application_id": app.id,
+            "student_id": app.student.id,
+            "student_name": app.student.name,
+            "email": app.student.email,
+            "branch": app.student.branch,
+            "cgpa": app.student.cgpa,
+            "application_status": app.status,
+            "result": app.result,
+            "interview": interview_data
+        })
+    
+    return jsonify(result), 200
+
+
+# 8. Company: Update application result
+@drives_bp.route("/company/applications/<int:application_id>/result", methods=["PATCH"])
+@company_required
+def company_update_application_result(application_id):
+    company_id = safe_get_jwt_id()
+    if company_id is None:
+        return jsonify({"message": "Invalid authentication token payload"}), 401
+    
+    data = request.get_json()
+    if not data or "result" not in data:
+        return jsonify({"message": "Missing result in request body"}), 400
+    
+    new_result = data["result"]
+    if new_result not in ["selected", "rejected", "waiting"]:
+        return jsonify({"message": "Invalid result. Must be 'selected', 'rejected', or 'waiting'"}), 400
+    
+    application = db.session.get(Application, application_id)
+    if not application:
+        return jsonify({"message": "Application not found"}), 404
+    
+    # Verify the drive belongs to the logged-in company
+    drive = db.session.get(PlacementDrive, application.drive_id)
+    if not drive:
+        return jsonify({"message": "Placement drive not found"}), 404
+    
+    if drive.company_id != company_id:
+        return jsonify({"message": "Unauthorized: You can only update results for your own drives"}), 403
+    
+    # Verify interview has been scheduled
+    interview = db.session.scalars(
+        select(InterviewSchedule).filter_by(application_id=application_id)
+    ).first()
+    if not interview:
+        return jsonify({"message": "Cannot update result: Interview has not been scheduled for this application"}), 400
+    
+    # Update result
+    application.result = new_result
+    
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"message": "An error occurred while updating the result"}), 500
+    
+    return jsonify({
+        "message": "Result updated successfully"
+    }), 200
+
+
+# 9. Company: Dashboard Stats
+@drives_bp.route("/company/dashboard", methods=["GET"])
+@company_required
+def company_dashboard_stats():
+    company_id = safe_get_jwt_id()
+    if company_id is None:
+        return jsonify({"message": "Invalid authentication token payload"}), 401
+    
+    total_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive).filter_by(company_id=company_id))
+    approved_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive).filter_by(company_id=company_id, status="approved"))
+    pending_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive).filter_by(company_id=company_id, status="pending"))
+    closed_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive).filter_by(company_id=company_id, status="closed"))
+    
+    # Get all drive IDs for this company
+    company_drive_ids = db.session.scalars(
+        select(PlacementDrive.id).filter_by(company_id=company_id)
+    ).all()
+    
+    total_applications = 0
+    if company_drive_ids:
+        total_applications = db.session.scalar(
+            select(func.count()).select_from(Application).filter(Application.drive_id.in_(company_drive_ids))
+        ) or 0
+    
+    # Count interviews scheduled (applications with interview schedule)
+    interviews_scheduled = 0
+    if company_drive_ids:
+        try:
+            interviews_scheduled = db.session.scalar(
+                select(func.count())
+                .select_from(Application)
+                .join(InterviewSchedule, Application.id == InterviewSchedule.application_id)
+                .filter(Application.drive_id.in_(company_drive_ids))
+            ) or 0
+        except Exception:
+            # Handle case where interview_schedules table schema is not updated
+            interviews_scheduled = 0
+    
+    # Count results
+    selected_students = 0
+    rejected_students = 0
+    waiting_students = 0
+    if company_drive_ids:
+        selected_students = db.session.scalar(
+            select(func.count()).select_from(Application).filter(
+                Application.drive_id.in_(company_drive_ids),
+                Application.result == "selected"
+            )
+        ) or 0
+        rejected_students = db.session.scalar(
+            select(func.count()).select_from(Application).filter(
+                Application.drive_id.in_(company_drive_ids),
+                Application.result == "rejected"
+            )
+        ) or 0
+        waiting_students = db.session.scalar(
+            select(func.count()).select_from(Application).filter(
+                Application.drive_id.in_(company_drive_ids),
+                Application.result == "waiting"
+            )
+        ) or 0
+    
+    return jsonify({
+        "total_drives": total_drives or 0,
+        "approved_drives": approved_drives or 0,
+        "pending_drives": pending_drives or 0,
+        "closed_drives": closed_drives or 0,
+        "total_applications": total_applications,
+        "interviews_scheduled": interviews_scheduled,
+        "selected_students": selected_students,
+        "rejected_students": rejected_students,
+        "waiting_students": waiting_students
+    }), 200
+
+
+# 10. Student: Dashboard Stats
+@drives_bp.route("/student/dashboard", methods=["GET"])
+@student_required
+def student_dashboard_stats():
+    student_id = safe_get_jwt_id()
+    if student_id is None:
+        return jsonify({"message": "Invalid authentication token payload"}), 401
+    
+    student = db.session.get(Student, student_id)
+    if not student:
+        return jsonify({"message": "Student not found"}), 404
+    
+    # Count eligible drives (approved drives where student meets criteria)
+    eligible_drives = db.session.scalar(
+        select(func.count())
+        .select_from(PlacementDrive)
+        .filter_by(status="approved")
+        .filter(PlacementDrive.eligibility_cgpa <= student.cgpa)
+    ) or 0
+    
+    # Count applied drives
+    applied_drives = db.session.scalar(
+        select(func.count()).select_from(Application).filter_by(student_id=student_id)
+    ) or 0
+    
+    # Count interviews (applications with interview schedule)
+    interviews = 0
+    try:
+        interviews = db.session.scalar(
+            select(func.count())
+            .select_from(Application)
+            .join(InterviewSchedule, Application.id == InterviewSchedule.application_id)
+            .filter_by(student_id=student_id)
+        ) or 0
+    except Exception:
+        # Handle case where interview_schedules table schema is not updated
+        interviews = 0
+    
+    # Count results
+    selected = db.session.scalar(
+        select(func.count()).select_from(Application).filter_by(student_id=student_id, result="selected")
+    ) or 0
+    rejected = db.session.scalar(
+        select(func.count()).select_from(Application).filter_by(student_id=student_id, result="rejected")
+    ) or 0
+    waiting = db.session.scalar(
+        select(func.count()).select_from(Application).filter_by(student_id=student_id, result="waiting")
+    ) or 0
+    
+    return jsonify({
+        "eligible_drives": eligible_drives,
+        "applied_drives": applied_drives,
+        "interviews": interviews,
+        "selected": selected,
+        "rejected": rejected,
+        "waiting": waiting
+    }), 200
+
+
+# 11. Admin: Dashboard Stats
+@drives_bp.route("/admin/dashboard", methods=["GET"])
+@admin_required
+def admin_dashboard_stats():
+    # Count students
+    total_students = db.session.scalar(select(func.count()).select_from(Student)) or 0
+    
+    # Count companies
+    total_companies = db.session.scalar(select(func.count()).select_from(Company)) or 0
+    approved_companies = db.session.scalar(select(func.count()).select_from(Company).filter_by(approval_status="approved")) or 0
+    pending_companies = db.session.scalar(select(func.count()).select_from(Company).filter_by(approval_status="pending")) or 0
+    
+    # Count drives
+    total_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive)) or 0
+    approved_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive).filter_by(status="approved")) or 0
+    pending_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive).filter_by(status="pending")) or 0
+    closed_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive).filter_by(status="closed")) or 0
+    
+    # Count applications
+    total_applications = db.session.scalar(select(func.count()).select_from(Application)) or 0
+    
+    # Count interviews scheduled
+    interviews_scheduled = 0
+    try:
+        interviews_scheduled = db.session.scalar(
+            select(func.count())
+            .select_from(Application)
+            .join(InterviewSchedule, Application.id == InterviewSchedule.application_id)
+        ) or 0
+    except Exception:
+        # Handle case where interview_schedules table schema is not updated
+        interviews_scheduled = 0
+    
+    # Count results
+    selected_students = db.session.scalar(
+        select(func.count()).select_from(Application).filter_by(result="selected")
+    ) or 0
+    rejected_students = db.session.scalar(
+        select(func.count()).select_from(Application).filter_by(result="rejected")
+    ) or 0
+    waiting_students = db.session.scalar(
+        select(func.count()).select_from(Application).filter_by(result="waiting")
+    ) or 0
+    
+    return jsonify({
+        "total_students": total_students,
+        "total_companies": total_companies,
+        "approved_companies": approved_companies,
+        "pending_companies": pending_companies,
+        "total_drives": total_drives,
+        "approved_drives": approved_drives,
+        "pending_drives": pending_drives,
+        "closed_drives": closed_drives,
+        "total_applications": total_applications,
+        "selected_students": selected_students,
+        "rejected_students": rejected_students,
+        "waiting_students": waiting_students,
+        "interviews_scheduled": interviews_scheduled
+    }), 200

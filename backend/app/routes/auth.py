@@ -2,10 +2,13 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token
 from werkzeug.security import check_password_hash, generate_password_hash
 from extensions import db
+from sqlalchemy import select, func
 
 from app.models.admin import Admin
 from app.models.student import Student
 from app.models.company import Company
+from app.models.placement_drive import PlacementDrive
+from app.models.application import Application
 
 from app.decorators.roles import admin_required, student_required, company_required
 
@@ -256,3 +259,95 @@ def company_profile():
     return jsonify({
         "message": "Welcome Company"
     })
+
+
+# -------------- Admin: Company Approval -------------
+
+@auth_bp.route("/admin/companies", methods=["GET"])
+@admin_required
+def admin_list_companies():
+    status = request.args.get("status")
+    
+    query = Company.query
+    if status:
+        query = query.filter_by(approval_status=status)
+    
+    companies = query.order_by(Company.created_at.desc()).all()
+    
+    result = []
+    for company in companies:
+        result.append({
+            "id": company.id,
+            "name": company.name,
+            "email": company.email,
+            "hr_contact": company.hr_contact,
+            "website": company.website,
+            "industry": company.industry,
+            "description": company.description,
+            "status": company.approval_status,
+            "is_active": company.is_active,
+            "created_at": company.created_at.strftime("%Y-%m-%d %H:%M:%S") if company.created_at else None
+        })
+    
+    return jsonify(result), 200
+
+
+@auth_bp.route("/admin/companies/<int:company_id>", methods=["PATCH"])
+@admin_required
+def admin_update_company_status(company_id):
+    company = Company.query.get(company_id)
+    if not company:
+        return jsonify({"message": "Company not found"}), 404
+    
+    data = request.get_json()
+    if not data or "approval_status" not in data:
+        return jsonify({"message": "Missing approval_status in request body"}), 400
+    
+    new_status = data["approval_status"]
+    if new_status not in ["approved", "rejected"]:
+        return jsonify({"message": "Invalid status. Must be 'approved' or 'rejected'"}), 400
+    
+    company.approval_status = new_status
+    
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": "An error occurred while updating company status"}), 500
+    
+    return jsonify({
+        "message": f"Company status updated to '{new_status}' successfully",
+        "company": {
+            "id": company.id,
+            "name": company.name,
+            "status": company.approval_status
+        }
+    }), 200
+
+
+# -------------- Admin: Dashboard Stats -------------
+
+@auth_bp.route("/admin/dashboard", methods=["GET"])
+@admin_required
+def admin_dashboard_stats():
+    total_students = db.session.scalar(select(func.count()).select_from(Student))
+    total_companies = db.session.scalar(select(func.count()).select_from(Company))
+    approved_companies = db.session.scalar(select(func.count()).select_from(Company).filter_by(approval_status="approved"))
+    pending_companies = db.session.scalar(select(func.count()).select_from(Company).filter_by(approval_status="pending"))
+    total_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive))
+    approved_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive).filter_by(status="approved"))
+    pending_drives = db.session.scalar(select(func.count()).select_from(PlacementDrive).filter_by(status="pending"))
+    total_applications = db.session.scalar(select(func.count()).select_from(Application))
+    selected_students = db.session.scalar(select(func.count()).select_from(Application).filter_by(result="selected"))
+    
+    return jsonify({
+        "total_students": total_students or 0,
+        "total_companies": total_companies or 0,
+        "approved_companies": approved_companies or 0,
+        "pending_companies": pending_companies or 0,
+        "total_drives": total_drives or 0,
+        "approved_drives": approved_drives or 0,
+        "pending_drives": pending_drives or 0,
+        "total_applications": total_applications or 0,
+        "selected_students": selected_students or 0
+    }), 200
