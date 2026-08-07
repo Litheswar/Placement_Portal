@@ -7,6 +7,7 @@ from werkzeug.security import generate_password_hash
 app = create_app()
 
 with app.app_context():
+    db.create_all()
     
     admin = Admin.query.filter_by(
         email="admin@placement.com"
